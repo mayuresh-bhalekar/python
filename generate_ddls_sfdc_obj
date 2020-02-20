@@ -1,0 +1,119 @@
+from simple_salesforce import Salesforce
+
+import pandas as pd
+
+USER='###@####.com'
+PWD='#####'
+token='##################'
+
+# to access UAT set the sandbox true option
+# sf = Salesforce(username=USER, password=PWD, security_token=token, sandbox=True)
+sf = Salesforce(username=USER, password=PWD, security_token=token)
+
+# (1) Set data type mapping
+mapping =\
+{'id':'varchar',\
+'boolean':'bool',\
+'reference':'varchar',\
+'string':'varchar',\
+'picklist':'varchar',\
+'textarea':'varchar',\
+'double':'float8',\
+'phone':'varchar',\
+'url':'varchar',\
+'currency':'double',\
+'int':'int',\
+'datetime':'timestamp',\
+'date':'timestamp',\
+'email':'varchar',\
+'multipicklist':'varchar',\
+'percent':'float8',\
+'decimal':'float8',\
+'long':'bigint',\
+'address':'varchar',\
+'masterrecord':'varchar',\
+'location':'varchar',\
+'encryptedstring':'varchar'}
+
+# (4) Size paramter set
+def set_parameter(column_type, record):
+    '''Takes column type and json record to determine column length/ percision'''
+    param = ''
+    if column_type == 'varchar' or column_type == 'Unknown':
+        param = "(" + str(record['length']) + ")"
+    elif column_type == 'decimal':
+        param = "(" + str(record['precision']) + "," + str(record['scale']) + ")"
+    else:
+        param = ''
+    return param
+
+# (5) Set Primary Key 
+def set_primary_key(column_name):
+    '''If id, then add primary key'''
+    param = ''
+    if column_name == 'id':
+        param = 'Primary Key'
+    else:
+        param = ''
+    return param
+    
+# (6) Mapping function
+import json
+import sys
+
+def map_columns (json_data):
+    ''' Takes json data from rest API and convert to Postgres Create Table Statement '''
+    field_list = []
+    counter = 1
+    for record in json_data['fields']:
+        tmp = []
+        column_name = record['name'].lower()
+        try:
+            column_type = mapping[record['type'].lower()]
+        except:
+            column_type = 'Unknown'
+        column_param = set_parameter(column_type, record)
+        primary_key_param = set_primary_key(column_name)
+
+        tmp.append(column_name)
+        tmp.append(column_type)
+        tmp.append(column_param)
+        tmp.append(primary_key_param)
+        counter += 1
+        if counter <= len(json_data['fields']):
+            tmp.append(",")
+        field_list.append(tmp)
+    return field_list
+    
+from string import Template
+t = Template('''grant select on ods.dl_sfdc_$tablename to readonly_user; 
+grant select on ods.dl_sfdc_$tablename to tabapp_user;
+commit;
+''')
+
+def create_ddl(object_name):
+    md = sf.restful("sobjects/{}/describe/".format(object_name), params=None)
+    field_list = map_columns(md)
+    tablename = object_name.lower()
+    ddlfile = tablename + ".sql"
+    with open(ddlfile, "w") as f:
+#         
+        f.write('Drop Table if exists ods.dl_sfdc_{};\n'.format(tablename))        
+        f.write('Create Table ods.dl_sfdc_{} (\n'.format(tablename))
+        for row in field_list:
+            f.write(' '.join(tuple(row)) +'\n')
+        f.write(');\n')
+        f.write(t.substitute(tablename=tablename))
+
+#         tablename = object_name.lower()
+#         f.write(users_grants.format(tablename))
+
+objectnamesraw = '''Case'''
+
+objectnames=objectnamesraw.split('\n')
+
+objectnames
+
+# object_name='DMAPP__DM_Account_Plan__c'
+for object_name in objectnames:
+    create_ddl(object_name)
