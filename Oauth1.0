@@ -1,0 +1,37 @@
+# Demo of calling Community API in Python.
+# Python imports
+import json
+import requests
+import requests_oauthlib
+import sys
+# AWS imports
+# Use AWS Secrets Manager to securely store credentials
+import boto3
+from botocore.exceptions import ClientError
+​
+# Get the credentials (key & secret) from AWS Secrets Manager.
+client = boto3.client(service_name='secretsmanager', region_name='us-west-2')
+get_secret_value_response = client.get_secret_value(SecretId='Commun_API_DWH')
+credentials = get_secret_value_response['SecretString']
+credentials = json.loads(credentials)  
+# Convert string into dictionary with keys of 'key' and 'secret'.
+# Form authentication from key & secret.
+auth = requests_oauthlib.OAuth1(credentials['key'], credentials['secret'], '', '')
+# Build parametes (specific to each API)
+params = {"_format": "json", "page": 0,}
+url = 'https://###.community-#####.com/rest/v1/entity-list/user'
+# Make the request and check status.
+print("Invoking API %s" % url)
+resp = requests.get(url, auth=auth, params=params)
+if resp.status_code != 200:
+    print("API failed with status code %d" % resp.status_code)
+    sys.exit()
+# Parse response.
+print("API returned OK")
+results = resp.json()
+print(json.dumps(results, indent=3)[:300] + "...") # Print sample data.
+for item in results['entities'][:10]: # limit to 10 items for demo
+    print("User %s, %s" % (item['uid'][0]['value'], item['name'][0]['value']))
+print("finished OK")
+sys.exit()
+Collapse
